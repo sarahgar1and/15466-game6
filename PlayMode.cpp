@@ -12,23 +12,42 @@
 
 #include <random>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+glm::vec3 PlayMode::get_acceleration(glm::vec3 pos){
+	glm::vec3 F = glm::vec3(0.0f);
+
+	for (auto & charge : charges){
+		glm::vec3 diff = pos - charge.pos;
+		float distance = glm::distance(pos, charge.pos);
+		diff *= (charge.q / (std::pow(distance, 3)));
+		F += diff;
+	}
+
+	F *= (k_e * q / m);
+
+	return F;
+}
+
+glm::vec3 PlayMode::get_pos(){
+	return 2.0f * prev_pos - prev_prev_pos + get_acceleration(prev_pos) * std::pow(dt, 2.0f);
+}
+
+GLuint maze_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > maze_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("maze0.pnct"));
+	maze_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
+Load< Scene > maze_scene(LoadTagDefault, []() -> Scene const * {
+	return new Scene(data_path("maze0.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+		Mesh const &mesh = maze_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
 		drawable.pipeline = lit_color_texture_program_pipeline;
 
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = maze_meshes_for_lit_color_texture_program;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -36,24 +55,33 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
+PlayMode::PlayMode() : scene(*maze_scene) {
 	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
+		if (transform.name == "PlayerCharge") player = &transform;
+		else if (transform.name == "FixedCharge") fixed_charge = &transform;
+		else if (transform.name == "FixedCharge1") fixed_charge1 = &transform;
 	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+	if (player == nullptr) throw std::runtime_error("Player charge not found.");
+	if (fixed_charge == nullptr) throw std::runtime_error("Fixed charge not found.");
+	if (fixed_charge1 == nullptr) throw std::runtime_error("Fixed charge (1) not found.");
 
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
+	FixedCharge fc;
+	fc.pos = fixed_charge->position;
+	fc.q = -1.602e-19f;
+	charges.emplace_back(fc);
+	FixedCharge fc1;
+	fc1.pos = fixed_charge1->position;
+	fc1.q = -1.602e-19f;
+	// charges.emplace_back(fc1);
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
+
+	// Initialize verlet integration vars
+	prev_prev_pos = glm::vec3(0.0f);
+	prev_pos = prev_prev_pos + glm::vec3(0.5f, 0.0f, 0.0f) * dt + 0.5f * get_acceleration(prev_prev_pos) * std::pow(dt, 2.0f);
 }
 
 PlayMode::~PlayMode() {
@@ -120,23 +148,19 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
+	// Update player position
+	time_acc += elapsed;
+	while (time_acc >= dt){
+		player->position = get_pos();
+		prev_prev_pos = prev_pos;
+		prev_pos = player->position;
+		time_acc -= dt;
+	}
+	
+	// player->position = get_pos(elapsed);
+	// prev_prev_pos = prev_pos;
+	// prev_pos = player->position;
+	// std::cout << "(" << player->position.x << ","  << player->position.y << "," << player->position.z << ")" << std::endl;
 
 	//move camera:
 	{

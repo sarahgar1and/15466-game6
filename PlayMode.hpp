@@ -17,6 +17,20 @@ struct PlayMode : Mode {
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
 	//----- game state -----
+	struct FixedCharge {
+		glm::vec3 pos;
+		double q; 
+	};
+	std::vector<FixedCharge> charges;
+	const double k_e = 8.99e9; // Coulomb's constant
+	double q = 1.602e-19; // Player charge
+	double m = 1.673e-27; // Player mass
+	glm::vec3 prev_pos;
+	glm::vec3 prev_prev_pos;
+	float dt = 1.0f / 60.0f; // Verlet integration time step 
+	float time_acc = 0.0f;
+	glm::vec3 get_acceleration(glm::vec3 pos);
+	glm::vec3 get_pos();
 
 	//input tracking:
 	struct Button {
@@ -28,13 +42,9 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
+	Scene::Transform *player = nullptr;
+	Scene::Transform *fixed_charge = nullptr;
+	Scene::Transform *fixed_charge1 = nullptr;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;
