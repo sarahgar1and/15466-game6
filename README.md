@@ -10,7 +10,12 @@ Screen Shot:
 
 How To Play:
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+- `Q` to toggle between +/- charge
+- `Space` to start level
+- Click to place charge
+- Number keys to switch levels
+
+Strategy: Opposite charges attract and same charges repel. Place a combination of charges around the maze to push/pull your charge from start to finish. 
 
 ## Extra Credit
 
@@ -20,7 +25,7 @@ Are your Physics Rewindable? If so, how can we verify this?
 
 ## Math
 Using [Coulomb's Law](https://en.wikipedia.org/wiki/Coulomb%27s_law), 
-$$\vec{F}_{player} = \sum_{c \in Charges} \frac{k_e q_{player}q_c}{|\vec{r}_{player} - \vec{r}_c|^3} (\vec{r}_{player} - \vec{r}_c) $$
+$$\vec{F}_{player} = \sum_{c \in Charges} \frac{k_e q_{player}q_c}{|\vec{r}_{player} - \vec{r}_c|^3} (\vec{r}_{player} - \vec{r}_c)$$
 
 where $k_e \approx 8.99 \times 10^9$
 
