@@ -25,12 +25,12 @@ Are your Physics Rewindable? If so, how can we verify this?
 
 ## Math
 Using [Coulomb's Law](https://en.wikipedia.org/wiki/Coulomb%27s_law), 
-$$\vec{F}_{player} = \sum_{c \in Charges} \frac{k_e q_{player}q_c}{|\vec{r}_{player} - \vec{r}_c|^3} (\vec{r}_{player} - \vec{r}_c)$$
+$$\vec{F}_{player} = \sum_{c \in Charges} \frac{k_e q_{player}q_c}{|\vec{r}_{player} - \vec{r}_c|^3}(\vec{r}_{player} - \vec{r}_c)$$
 
 where $k_e \approx 8.99 \times 10^9$
 
 Using Newton's Second Law ($\vec{F} = m \vec{a}$),
-$$ \vec{a}_{player} = \frac{d^2 \vec{r}_{player}}{dt^2} = \frac{k_e q_{player}}{m_{player}} (\sum_{c \in Charges} \frac{q_c}{|\vec{r}_{player} - \vec{r}_c|^3} (\vec{r}_{player} - \vec{r}_c))$$
+$$\vec{a}_{player} = \frac{d^2 \vec{r}_{player}}{dt^2} = \frac{k_e q_{player}}{m_{player}} (\sum_{c \in Charges} \frac{q_c}{|\vec{r}_{player} - \vec{r}_c|^3} (\vec{r}_{player} - \vec{r}_c))$$
 
 Calculate player position $\vec{r}_{player}$ using [Verlet Integration](https://en.wikipedia.org/wiki/Verlet_integration),
 
