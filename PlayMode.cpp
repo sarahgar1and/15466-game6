@@ -17,8 +17,9 @@ glm::vec3 PlayMode::get_acceleration(glm::vec3 pos){
 
 	for (auto & charge : charges){
 		glm::vec3 diff = pos - charge.pos;
-		float distance = glm::distance(pos, charge.pos);
-		diff *= (charge.q / (std::pow(distance, 3)));
+		float dist_sq = glm::dot(diff, diff);
+        float inv_dist_cube = 1.0f / (dist_sq * std::sqrt(dist_sq));
+		diff *= (charge.q * inv_dist_cube);
 		F += diff;
 	}
 
@@ -32,11 +33,11 @@ glm::vec3 PlayMode::get_pos(){
 }
 
 PlayMode::PlayMode() {
-	player_pos = glm::vec3(0.0f, 0.0f, 0.0f);
+	player_pos = glm::vec3(-1.0f, 0.0f, 0.0f);
 
 	// Initialize verlet integration vars
-	prev_prev_pos = glm::vec3(0.0f);
-	prev_pos = prev_prev_pos + glm::vec3(0.5f, 0.0f, 0.0f) * dt + 0.5f * get_acceleration(prev_prev_pos) * std::pow(dt, 2.0f);
+	prev_pos = player_pos;
+	prev_prev_pos = player_pos + 0.5f * get_acceleration(player_pos) * std::pow(dt, 2.0f);
 }
 
 PlayMode::~PlayMode() {
@@ -60,9 +61,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			R.pressed = true;
 			// RESET
 			playing = false;
-			player_pos = glm::vec3(0.0f, 0.0f, 0.0f);
-			prev_prev_pos = glm::vec3(0.0f);
-			prev_pos = prev_prev_pos + glm::vec3(0.5f, 0.0f, 0.0f) * dt + 0.5f * get_acceleration(prev_prev_pos) * std::pow(dt, 2.0f);
+			player_pos = glm::vec3(-1.0f, 0.0f, 0.0f);
+			prev_pos = player_pos;
+			prev_prev_pos = player_pos + 0.5f * get_acceleration(player_pos) * std::pow(dt, 2.0f);
 			charges.clear();
 			return true;
 		} 
@@ -89,6 +90,13 @@ void PlayMode::update(float elapsed) {
 	if (!playing){
 		return;
 	} 
+	// Check if charges have collided -> prevent r = 0
+	for (auto &fc : charges){
+		glm::vec3 diff = fc.pos - player_pos;
+		float dist_sq = glm::dot(diff, diff);
+		if (std::sqrt(dist_sq) <= ChargeRadius * 2.0f) return;
+	}
+
 	// Update player position
 	time_acc += elapsed;
 	while (time_acc >= dt){
@@ -174,6 +182,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		}
 		
 	}
+
+	// Draw walls
+	lines.draw(glm::vec3(0.5f, -0.5f, 0.0f), glm::vec3(0.5f, 0.5f, 0.0f), glm::u8vec4(0x00, 0x00, 0x00, 0xff));
 
 // 	{ //use DrawLines to overlay some text:
 // 		glDisable(GL_DEPTH_TEST);
