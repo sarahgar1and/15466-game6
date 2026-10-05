@@ -10,8 +10,8 @@ Screen Shot:
 
 How To Play:
 
-- `Q` to toggle between +/- charge
-- `Space` to start level
+- `Q` to toggle between placing +/- charge
+- `Space` to start/stop level
 - Click to place charge
 - Number keys to switch levels
 

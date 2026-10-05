@@ -21,32 +21,25 @@ struct PlayMode : Mode {
 		glm::vec3 pos;
 		double q; 
 	};
+	float ChargeRadius = 0.06f;
 	std::vector<FixedCharge> charges;
-	const double k_e = 8.99e9; // Coulomb's constant
+	double k_e = 8.99e9; // Coulomb's constant
 	double q = 1.602e-19; // Player charge
 	double m = 1.673e-27; // Player mass
 	glm::vec3 prev_pos;
 	glm::vec3 prev_prev_pos;
+	glm::vec3 player_pos;
 	float dt = 1.0f / 60.0f; // Verlet integration time step 
 	float time_acc = 0.0f;
 	glm::vec3 get_acceleration(glm::vec3 pos);
 	glm::vec3 get_pos();
+	bool playing = false;
+	double new_charge_q = -1.602e-19;
 
 	//input tracking:
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
-
-	//local copy of the game scene (so code can change it during gameplay):
-	Scene scene;
-
-	//hexapod leg to wobble:
-	Scene::Transform *player = nullptr;
-	Scene::Transform *fixed_charge = nullptr;
-	Scene::Transform *fixed_charge1 = nullptr;
-	
-	//camera:
-	Scene::Camera *camera = nullptr;
+	} Q, R, space;
 
 };

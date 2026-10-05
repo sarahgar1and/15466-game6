@@ -31,53 +31,8 @@ glm::vec3 PlayMode::get_pos(){
 	return 2.0f * prev_pos - prev_prev_pos + get_acceleration(prev_pos) * std::pow(dt, 2.0f);
 }
 
-GLuint maze_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > maze_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("maze0.pnct"));
-	maze_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
-	return ret;
-});
-
-Load< Scene > maze_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("maze0.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = maze_meshes->lookup(mesh_name);
-
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-
-		drawable.pipeline = lit_color_texture_program_pipeline;
-
-		drawable.pipeline.vao = maze_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-
-	});
-});
-
-PlayMode::PlayMode() : scene(*maze_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "PlayerCharge") player = &transform;
-		else if (transform.name == "FixedCharge") fixed_charge = &transform;
-		else if (transform.name == "FixedCharge1") fixed_charge1 = &transform;
-	}
-	if (player == nullptr) throw std::runtime_error("Player charge not found.");
-	if (fixed_charge == nullptr) throw std::runtime_error("Fixed charge not found.");
-	if (fixed_charge1 == nullptr) throw std::runtime_error("Fixed charge (1) not found.");
-
-	FixedCharge fc;
-	fc.pos = fixed_charge->position;
-	fc.q = -1.602e-19f;
-	charges.emplace_back(fc);
-	FixedCharge fc1;
-	fc1.pos = fixed_charge1->position;
-	fc1.q = -1.602e-19f;
-	// charges.emplace_back(fc1);
-
-	//get pointer to camera for convenience:
-	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
-	camera = &scene.cameras.front();
+PlayMode::PlayMode() {
+	player_pos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 	// Initialize verlet integration vars
 	prev_prev_pos = glm::vec3(0.0f);
@@ -90,149 +45,155 @@ PlayMode::~PlayMode() {
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
 
 	if (evt.type == SDL_EVENT_KEY_DOWN) {
-		if (evt.key.key == SDLK_ESCAPE) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, false);
+		if (evt.key.key == SDLK_SPACE) {
+			space.downs += 1;
+			space.pressed = true;
+			playing = !playing;
 			return true;
-		} else if (evt.key.key == SDLK_A) {
-			left.downs += 1;
-			left.pressed = true;
+		} else if (evt.key.key == SDLK_Q) {
+			Q.downs += 1;
+			Q.pressed = true;
+			new_charge_q *= -1.0f;
 			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.downs += 1;
-			right.pressed = true;
+		} else if (evt.key.key == SDLK_R) {
+			R.downs += 1;
+			R.pressed = true;
+			// RESET
+			playing = false;
+			player_pos = glm::vec3(0.0f, 0.0f, 0.0f);
+			prev_prev_pos = glm::vec3(0.0f);
+			prev_pos = prev_prev_pos + glm::vec3(0.5f, 0.0f, 0.0f) * dt + 0.5f * get_acceleration(prev_prev_pos) * std::pow(dt, 2.0f);
+			charges.clear();
 			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.downs += 1;
-			up.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.downs += 1;
-			down.pressed = true;
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_KEY_UP) {
-		if (evt.key.key == SDLK_A) {
-			left.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.pressed = false;
-			return true;
-		}
+		} 
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == false) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, true);
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == true) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
-			return true;
-		}
+		float mouseX = evt.button.x;
+		float mouseY = evt.button.y;
+		// Add a charge at position
+		float x = (2.0f * mouseX / window_size.x) - 1.0f;
+		float y = 1.0f - (2.0f * mouseY / window_size.y);
+		float aspect = float(window_size.x) / float(window_size.y);
+
+		FixedCharge fc;
+		fc.pos = glm::vec3(x * aspect, y, 0.0f);
+		fc.q = new_charge_q;
+		charges.emplace_back(fc);
+		
+		return true;
 	}
 
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
+	if (!playing){
+		return;
+	} 
 	// Update player position
 	time_acc += elapsed;
 	while (time_acc >= dt){
-		player->position = get_pos();
+		player_pos = get_pos();
 		prev_prev_pos = prev_pos;
-		prev_pos = player->position;
+		prev_pos = player_pos;
 		time_acc -= dt;
 	}
-	
-	// player->position = get_pos(elapsed);
-	// prev_prev_pos = prev_pos;
-	// prev_pos = player->position;
-	// std::cout << "(" << player->position.x << ","  << player->position.y << "," << player->position.z << ")" << std::endl;
-
-	//move camera:
-	{
-
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
-
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_parent_from_local();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
-	}
-
-	//reset button press counters:
-	left.downs = 0;
-	right.downs = 0;
-	up.downs = 0;
-	down.downs = 0;
+	// std::cout << "(" << player_pos.x << ","  << player_pos.y << "," << player_pos.z << ")" << std::endl;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	//update camera aspect ratio for drawable:
-	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	// From base5
+	static std::array< glm::vec2, 16 > const circle = [](){
+		std::array< glm::vec2, 16 > ret;
+		for (uint32_t a = 0; a < ret.size(); ++a) {
+			float ang = a / float(ret.size()) * 2.0f * float(M_PI);
+			ret[a] = glm::vec2(std::cos(ang), std::sin(ang));
+		}
+		return ret;
+	}();
 
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	glUseProgram(0);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
 
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	float aspect = float(drawable_size.x) / float(drawable_size.y);
+	DrawLines lines(glm::mat4(
+		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	));
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
-
-	GL_ERRORS(); //print any errors produced by this setup code
-
-	scene.draw(*camera);
-
-	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+	// Draw Player
+	glm::u8vec4 col;
+	if (q > 0) col = glm::u8vec4(0xff, 0x00, 0x00, 0xff);
+	else col = glm::u8vec4(0x00, 0x00, 0xff, 0xff);
+	for (uint32_t a = 0; a < circle.size(); ++a) {
+		lines.draw(
+			player_pos + glm::vec3(ChargeRadius * circle[a], 0.0f),
+			player_pos + glm::vec3(ChargeRadius * circle[(a + 1) % circle.size()], 0.0f),
+			col
+		);
 	}
+	float H = 0.1f;
+	if (q > 0){
+		lines.draw_text("+",
+		player_pos - glm::vec3(ChargeRadius * 0.25f, ChargeRadius * 0.5f, 0.0f),
+		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+		col);
+
+	} else {
+		lines.draw_text("-",
+		player_pos - glm::vec3(ChargeRadius * 0.25f, ChargeRadius * 0.5f, 0.0f),
+		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+		col);
+	}
+	// Draw fixed charges
+	for (auto const &fc : charges) {
+		glm::u8vec4 col;
+		if (fc.q > 0) col = glm::u8vec4(0xff, 0x00, 0x00, 0xff);
+		else col = glm::u8vec4(0x00, 0x00, 0xff, 0xff);
+
+		for (uint32_t a = 0; a < circle.size(); ++a) {
+			lines.draw(
+				fc.pos + glm::vec3(ChargeRadius * circle[a], 0.0f),
+				fc.pos + glm::vec3(ChargeRadius * circle[(a + 1) % circle.size()], 0.0f),
+				col
+			);
+		}
+		if (fc.q > 0){
+			lines.draw_text("+",
+			fc.pos - glm::vec3(ChargeRadius * 0.25f, ChargeRadius * 0.5f, 0.0f),
+			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			col);
+
+		} else {
+			lines.draw_text("-",
+			fc.pos - glm::vec3(ChargeRadius * 0.25f, ChargeRadius * 0.5f, 0.0f),
+			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			col);
+		}
+		
+	}
+
+// 	{ //use DrawLines to overlay some text:
+// 		glDisable(GL_DEPTH_TEST);
+// 		float aspect = float(drawable_size.x) / float(drawable_size.y);
+// 		DrawLines lines(glm::mat4(
+// 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+// 			0.0f, 1.0f, 0.0f, 0.0f,
+// 			0.0f, 0.0f, 1.0f, 0.0f,
+// 			0.0f, 0.0f, 0.0f, 1.0f
+// 		));
+
+// 		constexpr float H = 0.09f;
+// 		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+// 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+// 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+// 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+// 		float ofs = 2.0f / drawable_size.y;
+// 		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+// 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 0.1f * H + ofs, 0.0),
+// 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+// 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+// 	}
 }
