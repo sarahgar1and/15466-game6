@@ -10,16 +10,19 @@ Screen Shot:
 
 How To Play:
 
-- `Q` to toggle between placing +/- charge
+- `Q` to toggle between placing +/- charge (initially set to negative)
+- `R` to reset
 - `Space` to start/stop level
-- Click to place charge
-- Number keys to switch levels
+- Left click to place charge
+- Right click to remove charge
 
 Strategy: Opposite charges attract and same charges repel. Place a combination of charges around the maze to push/pull your charge from start to finish. 
 
+The idea is to place all your charges and then press play to watch it move through the maze, but that seems to be really hard if not impossible. Instead, placing charges as the player moves seems to work better.
+
 ## Extra Credit
 
-Are your Physics Deterministic? If so, how can we verify this? - Yes, you can reset levels and play it again. 
+Are your Physics Deterministic? If so, how can we verify this? - Yes, you can reset levels and play it again. The equations used are also deterministic.
 
 Are your Physics Rewindable? If so, how can we verify this?
 

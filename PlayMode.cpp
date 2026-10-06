@@ -11,6 +11,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
+#include <vector>
 
 glm::vec3 PlayMode::get_acceleration(glm::vec3 pos){
 	glm::vec3 F = glm::vec3(0.0f);
@@ -74,13 +75,23 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		float x = (2.0f * mouseX / window_size.x) - 1.0f;
 		float y = 1.0f - (2.0f * mouseY / window_size.y);
 		float aspect = float(window_size.x) / float(window_size.y);
-
-		FixedCharge fc;
-		fc.pos = glm::vec3(x * aspect, y, 0.0f);
-		fc.q = new_charge_q;
-		charges.emplace_back(fc);
-		
-		return true;
+		if (evt.button.button == SDL_BUTTON_LEFT){
+			FixedCharge fc;
+			fc.pos = glm::vec3(x * aspect, y, 0.0f);
+			fc.q = new_charge_q;
+			// std::cout << "(" << fc.pos.x << ","  << fc.pos.y << "," << fc.pos.z << ")" << std::endl;
+			charges.emplace_back(fc);
+			return true;
+		} else if (evt.button.button == SDL_BUTTON_RIGHT){
+			for (auto it = charges.begin(); it != charges.end();) {
+				if (std::pow(it->pos.x - x * aspect, 2.0f) + std::pow(it->pos.y - y, 2.0f) 
+					<= ChargeRadius * ChargeRadius) {
+					it = charges.erase(it); // erase() returns the iterator to the next element
+				} else {
+					++it; 
+				}
+    		}
+		}
 	}
 
 	return false;
@@ -94,13 +105,56 @@ void PlayMode::update(float elapsed) {
 	for (auto &fc : charges){
 		glm::vec3 diff = fc.pos - player_pos;
 		float dist_sq = glm::dot(diff, diff);
-		if (std::sqrt(dist_sq) <= ChargeRadius * 2.0f) return;
+		if (std::sqrt(dist_sq) <= ChargeRadius) return;
 	}
+
 
 	// Update player position
 	time_acc += elapsed;
 	while (time_acc >= dt){
 		player_pos = get_pos();
+
+		// Handle wall collision
+		for (auto& wall : walls) {
+			glm::vec3 A = glm::vec3 (wall.x, wall.y, 0.0f);
+			glm::vec3 B = glm::vec3(wall.z, wall.w, 0.0f);
+
+			glm::vec3 ab = B - A;
+			glm::vec3 ap = player_pos - A;
+			// Project onto wall
+			float t = glm::dot(ap, ab) / glm::dot(ab, ab);
+			t = glm::clamp(t, 0.0f, 1.0f);
+
+			glm::vec3 closest_point = A + t * ab;
+
+			glm::vec3 to_particle = player_pos - closest_point;
+			float distance = glm::length(to_particle);
+
+			// Prevent division by zero
+			if (distance == 0.0f) {
+				to_particle = glm::vec3(-ab.y, ab.x, 0.0f); 
+				distance = 0.001f;
+			}
+
+			if (distance < ChargeRadius) {
+				// Calculate the collision surface normal
+				glm::vec3 normal = to_particle / distance;
+				// Get implicit velocity
+				glm::vec3 velocity = player_pos - prev_pos;
+				float depth = ChargeRadius - distance;
+				player_pos += normal * depth;
+				// Flip velocity 
+				float normal_vel = glm::dot(velocity, normal);
+
+				// Only bounce if moving toward the wall
+				if (normal_vel < 0.0f) {
+					glm::vec3 reflected_velocity = velocity - (2.0f) * normal_vel * normal;     
+					// New implicit velocity
+					prev_pos = player_pos - reflected_velocity;
+				}
+			}
+		}
+
 		prev_prev_pos = prev_pos;
 		prev_pos = player_pos;
 		time_acc -= dt;
@@ -184,27 +238,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 
 	// Draw walls
-	lines.draw(glm::vec3(0.5f, -0.5f, 0.0f), glm::vec3(0.5f, 0.5f, 0.0f), glm::u8vec4(0x00, 0x00, 0x00, 0xff));
+	for (auto &wall : walls){
+		lines.draw(glm::vec3(wall[0], wall[1], 0.0f), glm::vec3(wall[2], wall[3], 0.0f), 
+				glm::u8vec4(0x00, 0x00, 0x00, 0xff));
+	}
 
-// 	{ //use DrawLines to overlay some text:
-// 		glDisable(GL_DEPTH_TEST);
-// 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-// 		DrawLines lines(glm::mat4(
-// 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-// 			0.0f, 1.0f, 0.0f, 0.0f,
-// 			0.0f, 0.0f, 1.0f, 0.0f,
-// 			0.0f, 0.0f, 0.0f, 1.0f
-// 		));
-
-// 		constexpr float H = 0.09f;
-// 		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-// 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-// 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-// 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-// 		float ofs = 2.0f / drawable_size.y;
-// 		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-// 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 0.1f * H + ofs, 0.0),
-// 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-// 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-// 	}
 }

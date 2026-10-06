@@ -36,6 +36,18 @@ struct PlayMode : Mode {
 	bool playing = false;
 	double new_charge_q = -1.602e-19;
 
+	std::vector<glm::vec4> walls = {// (x1, y1, x2, y2)
+		glm::vec4(-0.5f, -0.75f, -0.5f, -0.5f),
+		glm::vec4(-0.5f, 0.1f, -0.5f, 0.75f),
+		glm::vec4(-0.5f, -0.75f, 1.5f, -0.75f),
+		glm::vec4(-0.5f, 0.75f, 1.5f, 0.75f),
+		glm::vec4(1.5f, 0.75f, 1.5f, 0.0f),
+		glm::vec4(0.8f, 0.2f, 0.8f, -0.75f),
+		glm::vec4(1.5f, -0.75f, 1.5f, -0.5f),
+		glm::vec4(0.0f, 0.2f, 0.0f, 0.75f),
+		glm::vec4(0.8f, -0.3f, 0.2f, -0.3f)
+	}; 
+
 	//input tracking:
 	struct Button {
 		uint8_t downs = 0;
