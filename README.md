@@ -12,7 +12,7 @@ How To Play:
 
 - `Q` to toggle between placing +/- charge (initially set to negative)
 - `R` to reset
-- `Space` to start/stop level
+- `Space` to start/stop
 - Left click to place charge
 - Right click to remove charge
 
